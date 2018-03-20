@@ -69,33 +69,56 @@
 
 const DOMNodeCollection = __webpack_require__(1);
 
-function $l(selector) {
-  if (selector instanceof HTMLElement) {
-    const arr = [selector];
-    return new DOMNodeCollection(arr);
-  } else if (typeof selector === 'function') {
-    window.addEventListener("load", selector);
-    console.log('this should print before');
+const curriedCBs = [];
+let ready = false;
+
+function $l(arg) {
+  if (arg instanceof HTMLElement) {
+    return new DOMNodeCollection([arg]);
+  } else if (typeof arg === 'function') {
+    curryOrExecute(arg);
   } else {
-    const arr = Array.from(document.querySelectorAll(selector));
-    return new DOMNodeCollection(arr);
+    return new DOMNodeCollection(
+      Array.from(document.querySelectorAll(arg))
+    );
+  }
+}
+
+// function $l(selector) {
+//   if (selector instanceof HTMLElement) {
+//     const arr = [selector];
+//     return new DOMNodeCollection(arr);
+//   } else if (typeof selector === 'function') {
+//     window.addEventListener('load', selector);
+//     console.log('this should print before');
+//   } else {
+//     const arr = Array.from(document.querySelectorAll(selector));
+//     return new DOMNodeCollection(arr);
+//   }
+// }
+
+function curryOrExecute(f) {
+  if (ready) {
+    f();
+  } else {
+    curriedCBs.push(f);
   }
 }
 
 $l.__proto__.ajax = function(options) {
   let defThen = function () {
     console.log(xhr.status); // for status info
-    console.log(xhr.responseType); //the type of data that was returned
-    console.log(JSON.parse(xhr.response)); //the actual response. For JSON api calls, this will be a JSON string
+    console.log(xhr.responseType); // the type of data that was returned
+    console.log(JSON.parse(xhr.response)); // the actual response. For JSON api calls, this will be a JSON string
   };
-  
+
   let success = options.success || defThen;
   let error = options.error || defThen;
   let url = options.url || 'http://localhost/3000';
   let method = options.method || 'GET';
   let data = options.data || {};
   let contentType = options.contentType || 'JSON';
-  
+
   const xhr = new XMLHttpRequest();
 
   xhr.open(method, url);
@@ -105,14 +128,19 @@ $l.__proto__.ajax = function(options) {
   } else {
     xhr.onload = error;
   }
-  
-  xhr.send(data);
+
+  xhr.send(JSON.stringify(data));
 };
 
 window.$l = $l;
 window.DOMNodeCollection = DOMNodeCollection;
 
-$l( () => console.log('this should print after') );
+// $l( () => console.log('this should print after') );
+
+document.addEventListener('DOMContentLoaded', () => {
+  ready = true;
+  curriedCBs.forEach(f => f());
+});
 
 
 /***/ }),
@@ -124,31 +152,40 @@ class DOMNodeCollection {
     this.htmlArray = htmlArray;
   }
 
-  html(string) {
-    if (typeof string === "string") {
-      this.htmlArray.forEach(function(el) {
-        el.innerHTML = string;
-      });
+  html(str=null) {
+    if (str) {
+      this.htmlArray.forEach(node => (
+        node.innerHTML = str
+      ));
     } else {
       return this.htmlArray[0].innerHTML;
     }
   }
+  // html(string) {
+  //   if (typeof string === "string") {
+  //     this.htmlArray.forEach(function(el) {
+  //       el.innerHTML = string;
+  //     });
+  //   } else {
+  //     return this.htmlArray[0].innerHTML;
+  //   }
+  // }
 
   empty() {
-    this.html("");
+    this.html('');
   }
 
   append(arg) {
     if (arg instanceof DOMNodeCollection) {
       const that = this;
-      arg.htmlArray.forEach(function (htmlel) {
-        that.append(htmlel);
+      arg.htmlArray.forEach(function (node) {
+        that.append(node);
       });
+
     } else if (arg instanceof HTMLElement) {
       this.htmlArray.forEach(function(el) {
         el.innerHTML += arg.outerHTML;
       });
-
 
     } else if (typeof arg === 'string') {
       this.htmlArray.forEach(function(el) {
@@ -168,65 +205,71 @@ class DOMNodeCollection {
   }
 
   addClass(className) {
-    this.htmlArray.forEach(function (htmlel) {
-      htmlel.classList.add(className);
+    this.htmlArray.forEach(function (node) {
+      node.classList.add(className);
     });
   }
 
   removeClass(className) {
-    this.htmlArray.forEach(function (htmlel) {
-      htmlel.classList.remove(className);
+    this.htmlArray.forEach(function (node) {
+      node.classList.remove(className);
     });
   }
 
   children() {
-    const childs = this.htmlArray.map( (el) => {
-      return Array.prototype.slice.call( el.children );
-    });
+    const childs = this.htmlArray.map(node => (
+      Array.from( node.children )
+    ));
     return new DOMNodeCollection(childs[0]);
   }
+  // children() {
+  //   const childs = this.htmlArray.map( (el) => {
+  //     return Array.prototype.slice.call( el.children );
+  //   });
+  //   return new DOMNodeCollection(childs[0]);
+  // }
 
   parent() {
-    const par = [];
-    this.htmlArray.forEach( (el) => {
-      if (!par.includes(el.parentNode)) {
-         par.push(el.parentNode);
+    const parents = [];
+    this.htmlArray.forEach(node => {
+      if (!parents.includes(node.parentNode)) {
+         parents.push(node.parentNode);
       }
     });
-    return new DOMNodeCollection(par);
+    return new DOMNodeCollection(parents);
   }
 
   find(selector) {
-    let arr = [];
-    this.htmlArray.forEach( (el) => {
-      arr = arr.concat(
-        Array.from(el.querySelectorAll(selector))
+    let foundNodes = [];
+    this.htmlArray.forEach(node => {
+      foundNodes = foundNodes.concat(
+        Array.from(node.querySelectorAll(selector))
       );
     });
-    return new DOMNodeCollection(arr);
+    return new DOMNodeCollection(foundNodes);
   }
 
   remove() {
-    this.htmlArray.forEach ( (el) => {
-      const parent = el.parentNode;
-      parent.removeChild(el);
+    this.htmlArray.forEach(node => {
+      const parent = node.parentNode;
+      parent.removeChild(node);
     });
     this.htmlArray = [];
   }
 
-  on (type, handler) {
-    this.htmlArray.forEach ( (el) => {
-      el.addEventListener(type, handler);
-      el.type = type;
-      el.listener = handler;
+  on(type, handler) {
+    this.htmlArray.forEach(node => {
+      node.addEventListener(type, handler);
+      node.type = type;
+      node.listener = handler;
     });
   }
 
-  off (type, handler) {
-    this.htmlArray.forEach ( (el) => {
-      type = el.type || type;
-      handler = el.listener || handler;
-      el.removeEventListener(type, handler);
+  off(type, handler) {
+    this.htmlArray.forEach(node => {
+      type = node.type || type;
+      handler = node.listener || handler;
+      node.removeEventListener(type, handler);
     });
   }
 

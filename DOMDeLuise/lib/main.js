@@ -1,32 +1,42 @@
 const DOMNodeCollection = require('./dom_node_collection.js');
 
-function $l(selector) {
-  if (selector instanceof HTMLElement) {
-    const arr = [selector];
-    return new DOMNodeCollection(arr);
-  } else if (typeof selector === 'function') {
-    window.addEventListener("load", selector);
-    console.log('this should print before');
+const curriedCBs = [];
+let ready = false;
+
+function $l(arg) {
+  if (arg instanceof HTMLElement) {
+    return new DOMNodeCollection([arg]);
+  } else if (typeof arg === 'function') {
+    curryOrExecute(arg);
   } else {
-    const arr = Array.from(document.querySelectorAll(selector));
-    return new DOMNodeCollection(arr);
+    return new DOMNodeCollection(
+      Array.from(document.querySelectorAll(arg))
+    );
+  }
+}
+
+function curryOrExecute(f) {
+  if (ready) {
+    f();
+  } else {
+    curriedCBs.push(f);
   }
 }
 
 $l.__proto__.ajax = function(options) {
   let defThen = function () {
     console.log(xhr.status); // for status info
-    console.log(xhr.responseType); //the type of data that was returned
-    console.log(JSON.parse(xhr.response)); //the actual response. For JSON api calls, this will be a JSON string
+    console.log(xhr.responseType); // the type of data that was returned
+    console.log(JSON.parse(xhr.response)); // the actual response. For JSON api calls, this will be a JSON string
   };
-  
+
   let success = options.success || defThen;
   let error = options.error || defThen;
   let url = options.url || 'http://localhost/3000';
   let method = options.method || 'GET';
   let data = options.data || {};
   let contentType = options.contentType || 'JSON';
-  
+
   const xhr = new XMLHttpRequest();
 
   xhr.open(method, url);
@@ -36,11 +46,14 @@ $l.__proto__.ajax = function(options) {
   } else {
     xhr.onload = error;
   }
-  
-  xhr.send(data);
+
+  xhr.send(JSON.stringify(data));
 };
 
 window.$l = $l;
-window.DOMNodeCollection = DOMNodeCollection;
+// window.DOMNodeCollection = DOMNodeCollection;
 
-$l( () => console.log('this should print after') );
+document.addEventListener('DOMContentLoaded', () => {
+  ready = true;
+  curriedCBs.forEach(f => f());
+});
